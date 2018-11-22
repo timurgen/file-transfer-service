@@ -52,7 +52,7 @@ def process():
 
             file_to_upload.close()
             os.remove(file_path)
-            input_entity['transfer_service'] = "TRANSFERED"
+            input_entity['transfer_service'] = "TRANSFERRED"
         except Exception as e:
             input_entity['transfer_service'] = "ERROR: {}".format(str(e))
     return Response(json.dumps(input_data), content_type='application/json')
