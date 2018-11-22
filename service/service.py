@@ -2,6 +2,7 @@ import requests
 import os
 import tempfile
 import logging
+import json
 
 from flask import Flask, Response, request
 
@@ -16,12 +17,17 @@ UPLOAD_URL = os.environ.get('UPLOAD_URL')
 
 if not UPLOAD_URL:
     logging.error("Target endpoint not defined. Check UPLOAD_URL env. variable  in your config.")
+    exit(1)
 
 logging.getLogger().setLevel(logging.DEBUG)
 
 
 @APP.route("/transfer", methods=['POST'])
 def process():
+    """
+    transfer service entry point
+    :return:
+    """
     input_data = request.get_json()
 
     for input_entity in input_data:
@@ -30,16 +36,26 @@ def process():
 
         logging.info("processing request for {}".format(file_name))
 
-        res = requests.get(file_url, stream=True)
-        file_path = download_file(res)
+        try:
+            res = requests.get(file_url, stream=True)
 
-        logging.debug("Starting upload file {} to {}".format(file_name, UPLOAD_URL))
+            res.raise_for_status()
 
-        requests.post(UPLOAD_URL, files={file_name: (file_name, open(file_path, 'rb'))})
+            file_path = download_file(res)
 
-        logging.debug("Deleting temporary file {}".format(file_path))
-        os.remove(file_path)
-    return Response()
+            logging.debug("Starting upload file {} to {}".format(file_name, UPLOAD_URL))
+
+            file_to_upload = open(file_path, 'rb')
+            requests.post(UPLOAD_URL, files={file_name: (file_name, file_to_upload)})
+
+            logging.debug("Deleting temporary file {}".format(file_path))
+
+            file_to_upload.close()
+            os.remove(file_path)
+            input_entity['transfer_service'] = "TRANSFERED"
+        except Exception as e:
+            input_entity['transfer_service'] = "ERROR: {}".format(str(e))
+    return Response(json.dumps(input_data), content_type='application/json')
 
 
 def download_file(res):
