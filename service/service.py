@@ -11,7 +11,7 @@ APP = Flask(__name__)
 FILE_URL = os.environ.get('FILE_URL', 'file_url')
 FILE_NAME = os.environ.get('FILE_NAME', 'file_id')
 # chunk size 10Mb
-CHUNK_SIZE = os.environ.get('CHUNK_SIZE', 262144*4*10)
+CHUNK_SIZE = os.environ.get('CHUNK_SIZE', 262144 * 4 * 10)
 
 UPLOAD_URL = os.environ.get('UPLOAD_URL')
 
@@ -33,6 +33,7 @@ def process():
     for input_entity in input_data:
         file_url = input_entity[FILE_URL]
         file_name = input_entity[FILE_NAME]
+        local_path = input_entity['local_path']
 
         logging.info("processing request for {}".format(file_name))
 
@@ -46,7 +47,8 @@ def process():
             logging.debug("Starting upload file {} to {}".format(file_name, UPLOAD_URL))
 
             file_to_upload = open(file_path, 'rb')
-            requests.post(UPLOAD_URL, files={file_name: (file_name, file_to_upload)})
+            requests.post(UPLOAD_URL, files={file_name: (file_name, file_to_upload)},
+                          headers={"local_path": local_path})
 
             logging.debug("Deleting temporary file {}".format(file_path))
 
