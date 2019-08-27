@@ -23,6 +23,9 @@ UPLOAD_URL = os.environ.get('UPLOAD_URL')
 
 FAIL_FAST_ON_ERROR = str_to_bool(os.environ.get('FAIL_FAST_ON_ERROR', 'false'))
 
+LOG_LEVEL = os.environ.get('LOG_LEVEL', "INFO")
+PORT = int(os.environ.get('PORT', '5000'))
+
 if not UPLOAD_URL:
     logging.error("Target endpoint not defined. Check UPLOAD_URL env. variable  in your config.")
     exit(1)
@@ -88,4 +91,25 @@ def download_file(res: requests.Response) -> str:
 
 
 if __name__ == "__main__":
-    APP.run(threaded=True, debug=True, host='0.0.0.0', port=5000)
+    logging.basicConfig(level=logging.getLevelName(LOG_LEVEL))
+
+    IS_DEBUG_ENABLED = logging.getLogger().isEnabledFor(logging.DEBUG)
+
+    if IS_DEBUG_ENABLED:
+        APP.run(debug=IS_DEBUG_ENABLED, host='0.0.0.0', port=PORT)
+    else:
+        import cherrypy
+
+        cherrypy.tree.graft(APP, '/')
+        cherrypy.config.update({
+            'environment': 'production',
+            'engine.autoreload_on': True,
+            'log.screen': False,
+            'server.socket_port': PORT,
+            'server.socket_host': '0.0.0.0',
+            'server.thread_pool': 10,
+            'server.max_request_body_size': 0
+        })
+
+        cherrypy.engine.start()
+        cherrypy.engine.block()
