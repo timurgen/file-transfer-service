@@ -1,2 +1,3 @@
-Flask==1.0.2
-requests==2.20.0
+Flask==1.1.1
+requests==2.22.0
+cherrypy==18.1.2
