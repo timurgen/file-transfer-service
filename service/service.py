@@ -39,9 +39,7 @@ def process():
 
         try:
             res = requests.get(file_url, stream=True)
-
             res.raise_for_status()
-
             file_path = download_file(res)
 
             logging.debug("Starting upload file {} to {}".format(file_name, UPLOAD_URL))
@@ -57,7 +55,8 @@ def process():
         except Exception as e:
             input_entity['transfer_service'] = "ERROR: {}".format(str(e))
         finally:
-            os.remove(file_path)
+            if file_path:
+                os.remove(file_path)
     return Response(json.dumps(input_data), content_type='application/json')
 
 
