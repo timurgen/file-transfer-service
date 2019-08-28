@@ -48,6 +48,8 @@ def process():
 
         logging.info(f"processing request for {file_name}")
 
+        file_path = None
+
         try:
             res = requests.get(file_url, stream=True)
             res.raise_for_status()
