@@ -9,28 +9,26 @@ import json
 
 import requests
 from flask import Flask, Response, request
+from sesamutils import VariablesConfig, sesam_logger
+from sesamutils.flask import serve
 
 from str_utils import str_to_bool
 
 APP = Flask(__name__)
-"""Property name in entities in incoming data that contains url to file to be downloaded"""
-FILE_URL = os.environ.get('FILE_URL', 'file_url')
-FILE_NAME = os.environ.get('FILE_NAME', 'file_id')
-# chunk size 10Mb
-CHUNK_SIZE = os.environ.get('CHUNK_SIZE', 262144 * 4 * 10)
 
-UPLOAD_URL = os.environ.get('UPLOAD_URL')
+logger = sesam_logger("file-transfer-service", app=APP)
 
-FAIL_FAST_ON_ERROR = str_to_bool(os.environ.get('FAIL_FAST_ON_ERROR', 'false'))
+required_env_vars = ["UPLOAD_URL"]
+optional_env_vars = [("FILE_URL", "file_url"),
+                     ("FILE_NAME", "file_id"),
+                     ("TARGET_PATH", "local_path"),
+                     ("TARGET_PATH_IN_URL", "false"),
+                     ("CHUNK_SIZE", 262144 * 4 * 10),  # chunk size 10Mb
+                     ("FAIL_FAST_ON_ERROR", "false")]
+config = VariablesConfig(required_env_vars, optional_env_vars)
 
-LOG_LEVEL = os.environ.get('LOG_LEVEL', "INFO")
-PORT = int(os.environ.get('PORT', '5000'))
-
-if not UPLOAD_URL:
-    logging.error("Target endpoint not defined. Check UPLOAD_URL env. variable  in your config.")
+if not config.validate():
     exit(1)
-
-logging.getLogger().setLevel(logging.DEBUG)
 
 
 @APP.route("/transfer", methods=['POST'])
@@ -41,12 +39,14 @@ def process():
     """
     input_data = request.get_json()
 
-    for input_entity in input_data:
-        file_url = input_entity[FILE_URL]
-        file_name = input_entity[FILE_NAME]
-        local_path = input_entity['local_path']
+    failures = False
 
-        logging.info(f"processing request for {file_name}")
+    for input_entity in input_data:
+        file_url = input_entity[config.FILE_URL]
+        file_name = input_entity[config.FILE_NAME]
+        target_path = input_entity[config.TARGET_PATH]
+
+        logger.info(f"processing request for {file_name}")
 
         file_path = None
 
@@ -55,23 +55,32 @@ def process():
             res.raise_for_status()
             file_path = download_file(res)
 
-            logging.debug(f"Starting upload file {file_name} to {UPLOAD_URL}")
+            logger.debug(f"Starting upload file {file_name} to {config.UPLOAD_URL}")
 
             file_to_upload = open(file_path, 'rb')
-            requests.post(UPLOAD_URL, files={file_name: (file_name, file_to_upload)},
-                          headers={"local_path": local_path})
-
-            logging.debug(f"Deleting temporary file {file_path}")
+            if str_to_bool(config.TARGET_PATH_IN_URL):
+                upload_url = '/'.join(s.strip('/') for s in [config.UPLOAD_URL, target_path])
+                send_resp = requests.post(upload_url, files={file_name: (file_name, file_to_upload)})
+            else:
+                send_resp = requests.post(config.UPLOAD_URL,
+                                          files={file_name: (file_name, file_to_upload)},
+                                          headers={"local_path": target_path})
+            send_resp.raise_for_status()
+            logger.debug(f"Deleting temporary file {file_path}")
 
             file_to_upload.close()
             input_entity['transfer_service'] = "TRANSFERRED"
         except Exception as exc:
             input_entity['transfer_service'] = f"ERROR: {exc}"
-            if FAIL_FAST_ON_ERROR:
+            if str_to_bool(config.FAIL_FAST_ON_ERROR):
                 raise exc
+            failures = True
         finally:
             if file_path:
                 os.remove(file_path)
+    if failures:
+        # Return error after proccessing all entities in batch if one of them resulted in error.
+        return Response(status=500, response=json.dumps(input_data), content_type='application/json')
     return Response(json.dumps(input_data), content_type='application/json')
 
 
@@ -82,36 +91,21 @@ def download_file(res: requests.Response) -> str:
     :param res: requests.Response instance
     :return: stored file name (path)
     """
-    logging.debug("Chunked file download started")
+    logger.debug("Chunked file download started")
     with tempfile.NamedTemporaryFile(delete=False) as file:
-        for chunk in res.iter_content(chunk_size=CHUNK_SIZE):
+        for chunk in res.iter_content(chunk_size=config.CHUNK_SIZE):
             if chunk:
                 file.write(chunk)
         file.close()
-    logging.debug(f"File stored as {file.name}")
+    logger.debug(f"File stored as {file.name}")
     return file.name
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.getLevelName(LOG_LEVEL))
 
-    IS_DEBUG_ENABLED = logging.getLogger().isEnabledFor(logging.DEBUG)
+    IS_DEBUG_ENABLED = logger.isEnabledFor(logging.DEBUG)
 
     if IS_DEBUG_ENABLED:
-        APP.run(debug=IS_DEBUG_ENABLED, host='0.0.0.0', port=PORT)
+        APP.run(debug=IS_DEBUG_ENABLED, host='0.0.0.0', port=5000)
     else:
-        import cherrypy
-
-        cherrypy.tree.graft(APP, '/')
-        cherrypy.config.update({
-            'environment': 'production',
-            'engine.autoreload_on': True,
-            'log.screen': False,
-            'server.socket_port': PORT,
-            'server.socket_host': '0.0.0.0',
-            'server.thread_pool': 10,
-            'server.max_request_body_size': 0
-        })
-
-        cherrypy.engine.start()
-        cherrypy.engine.block()
+        serve(APP)
