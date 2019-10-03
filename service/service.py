@@ -108,4 +108,5 @@ if __name__ == "__main__":
     if IS_DEBUG_ENABLED:
         APP.run(debug=IS_DEBUG_ENABLED, host='0.0.0.0', port=5000)
     else:
-        serve(APP)
+        serve(APP, config={'server.max_request_body_size': 0,
+                           'server.socket_timeout': 60})
