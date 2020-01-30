@@ -21,6 +21,7 @@ logger = sesam_logger("file-transfer-service", app=APP)
 required_env_vars = ["UPLOAD_URL"]
 optional_env_vars = [("FILE_URL", "file_url"),
                      ("FILE_NAME", "file_id"),
+                     ("CONTENT_TYPE", "content_type"),
                      ("TARGET_PATH", "local_path"),
                      ("TARGET_PATH_IN_URL", "false"),
                      ("CHUNK_SIZE", 262144 * 4 * 10),  # chunk size 10Mb
@@ -45,6 +46,7 @@ def process():
         file_url = input_entity[config.FILE_URL]
         file_name = input_entity[config.FILE_NAME]
         target_path = input_entity[config.TARGET_PATH]
+        content_type = input_entity[config.CONTENT_TYPE]
 
         logger.info(f"processing request for {file_name}")
 
@@ -58,12 +60,16 @@ def process():
             logger.debug(f"Starting upload file {file_name} to {config.UPLOAD_URL}")
 
             file_to_upload = open(file_path, 'rb')
+            if content_type is not None:
+                files = {file_name: (file_name, file_to_upload, content_type)}
+            else:
+                files = {file_name: (file_name, file_to_upload)}
             if str_to_bool(config.TARGET_PATH_IN_URL):
                 upload_url = '/'.join(s.strip('/') for s in [config.UPLOAD_URL, target_path])
-                send_resp = requests.post(upload_url, files={file_name: (file_name, file_to_upload)})
+                send_resp = requests.post(upload_url, files=files)
             else:
                 send_resp = requests.post(config.UPLOAD_URL,
-                                          files={file_name: (file_name, file_to_upload)},
+                                          files=files,
                                           headers={"local_path": target_path})
             send_resp.raise_for_status()
             logger.debug(f"Deleting temporary file {file_path}")
