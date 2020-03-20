@@ -20,5 +20,6 @@ Downloaded attachment will then be uploaded to URL from env var UPLOAD_URL (requ
 * TARGET_PATH_IN_URL  default: "false"          # If target_path should be sent in url instead of as header
 * CHUNK_SIZE          default: 262144 * 4 * 10  # chunk size 10Mb
 * FAIL_FAST_ON_ERROR  default: false            # If the transfer should fail at first error or try the whole batch
+* LOG_LEVEL           default: INFO             # Default log_level for the microservice
 
 
