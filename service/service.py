@@ -25,7 +25,8 @@ optional_env_vars = [("FILE_URL", "file_url"),
                      ("TARGET_PATH", "local_path"),
                      ("TARGET_PATH_IN_URL", "false"),
                      ("CHUNK_SIZE", 262144 * 4 * 10),  # chunk size 10Mb
-                     ("FAIL_FAST_ON_ERROR", "false")]
+                     ("FAIL_FAST_ON_ERROR", "false"),
+                     ("LOG_LEVEL", "INFO")]
 config = VariablesConfig(required_env_vars, optional_env_vars)
 
 if not config.validate():
@@ -72,18 +73,20 @@ def process():
                                           files=files,
                                           headers={"local_path": target_path})
             send_resp.raise_for_status()
-            logger.debug(f"Deleting temporary file {file_path}")
 
             file_to_upload.close()
             input_entity['transfer_service'] = "TRANSFERRED"
         except Exception as exc:
+            logger.error(f"Error when transferring file {file_name} to {config.UPLOAD_URL}: '{exc}'")
             input_entity['transfer_service'] = f"ERROR: {exc}"
             if str_to_bool(config.FAIL_FAST_ON_ERROR):
                 raise exc
             failures = True
         finally:
             if file_path:
+                logger.debug(f"Deleting temporary file {file_path}")
                 os.remove(file_path)
+
     if failures:
         # Return error after proccessing all entities in batch if one of them resulted in error.
         return Response(status=500, response=json.dumps(input_data), content_type='application/json')
