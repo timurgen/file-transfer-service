@@ -12,7 +12,7 @@ from flask import Flask, Response, request
 from sesamutils import VariablesConfig, sesam_logger
 from sesamutils.flask import serve
 
-from .str_utils import str_to_bool
+from str_utils import str_to_bool
 
 APP = Flask(__name__)
 
